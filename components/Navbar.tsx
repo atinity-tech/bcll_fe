@@ -16,7 +16,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
+    <nav className="bg-primary-blue text-white shadow">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -30,39 +30,38 @@ export default function Navbar() {
                 className="rounded"
               />
             </div>
-            <span className="text-xl font-bold">Bhopal Bus POC</span>
+            <span className="font-display text-xl font-semibold">Bhopal Bus POC</span>
           </Link>
 
           {/* Navigation Links */}
           <div className="flex items-center space-x-6">
             {isAuthenticated ? (
               <>
-                <div className="flex items-center space-x-2 bg-blue-700 px-4 py-2 rounded-lg">
-                  <User className="w-4 h-4" />
-                  <span className="text-sm font-medium">{user?.email}</span>
-                  <span className="text-xs bg-blue-500 px-2 py-1 rounded">
-                    {user?.role}
-                  </span>
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <User className="w-4 h-4 text-white/80" />
+                    <span className="text-sm font-medium">{user?.email} ({user?.role})</span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-lg transition text-sm bg-status-error/80 hover:bg-status-error"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center space-x-2 bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg transition"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
-                </button>
               </>
             ) : (
               <>
                 <Link
                   href="/login"
-                  className="hover:bg-blue-700 px-4 py-2 rounded-lg transition"
+                  className="px-4 py-2 rounded-lg transition text-sm hover:bg-white/10"
                 >
                   Login
                 </Link>
                 <Link
                   href="/register"
-                  className="bg-white text-blue-600 hover:bg-gray-100 px-4 py-2 rounded-lg transition font-medium"
+                  className="px-4 py-2 rounded-lg transition text-sm font-medium border border-white hover:bg-white hover:text-primary-blue"
                 >
                   Register
                 </Link>
