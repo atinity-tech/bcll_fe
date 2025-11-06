@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Google Maps Autocomplete Styling */
+.pac-container {
+  background-color: #fff;
+  z-index: 9999 !important;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+  margin-top: 4px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.pac-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pac-item:first-child {
+  border-top: none;
+}
+
+.pac-item:hover {
+  background-color: #f3f4f6;
+}
+
+.pac-item-selected {
+  background-color: #eff6ff;
+}
+
+.pac-icon {
+  margin-right: 8px;
+  background-image: url(https://maps.gstatic.com/mapfiles/api-3/images/autocomplete-icons.png);
+  background-size: 34px;
+}
+
+.pac-item-query {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.pac-matched {
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.pac-logo:after {
+  content: "";
+  padding: 8px;
+  height: 16px;
+  display: block;
+  background-image: url(https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png);
+  background-position: right;
+  background-repeat: no-repeat;
+  background-size: 120px 14px;
+}
