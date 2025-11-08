@@ -6,6 +6,10 @@ import { useAuthStore } from "@/lib/store";
 import { adminAPI, type Route, type Schedule } from "@/lib/api";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import AdminSidebar from "@/components/AdminSidebar";
+import BusDeploymentModal from "@/components/BusDeploymentModal";
+import ScheduleMatrix from "@/components/ScheduleMatrix";
+import RouteStopsDisplay from "@/components/RouteStopsDisplay";
+import RoutePathPreview from "@/components/RoutePathPreview";
 import {
   MapPin,
   Clock,
@@ -79,6 +83,14 @@ export default function AdminDashboard() {
   const [planResults, setPlanResults] = useState<BusRouteResult[]>([]);
   const [planning, setPlanning] = useState(false);
   const [savingRoute, setSavingRoute] = useState<string | null>(null); // Track which bus route is being saved
+
+  // New state for enhanced features
+  const [deployModalOpen, setDeployModalOpen] = useState(false);
+  const [selectedRouteForDeploy, setSelectedRouteForDeploy] = useState<{ id: string; name: string } | null>(null);
+  const [matrixViewRouteId, setMatrixViewRouteId] = useState<string | null>(null);
+
+  // State for place names (geocoding results)
+  const [placeNames, setPlaceNames] = useState<{ [key: string]: string }>({});
 
   // Google Maps
   const mapRef = useRef<HTMLDivElement>(null);
@@ -539,6 +551,49 @@ export default function AdminDashboard() {
     } finally {
       setPlanning(false);
     }
+  };
+
+  // Fetch place name from coordinates using Google Geocoding API
+  const getPlaceName = async (lat: number, lng: number): Promise<string> => {
+    const key = `${lat},${lng}`;
+
+    // Check if already cached
+    if (placeNames[key]) {
+      return placeNames[key];
+    }
+
+    try {
+      if (!window.google || !window.google.maps) {
+        return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      }
+
+      const geocoder = new google.maps.Geocoder();
+      const result = await geocoder.geocode({ location: { lat, lng } });
+
+      if (result.results && result.results.length > 0) {
+        // Try to get a meaningful place name
+        const place = result.results[0];
+        let placeName = place.formatted_address || '';
+
+        // Try to extract a shorter, more meaningful name
+        for (const component of place.address_components) {
+          if (component.types.includes('neighborhood') ||
+              component.types.includes('sublocality') ||
+              component.types.includes('locality')) {
+            placeName = component.long_name;
+            break;
+          }
+        }
+
+        // Cache the result
+        setPlaceNames(prev => ({ ...prev, [key]: placeName }));
+        return placeName;
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+    }
+
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   };
 
   // Select a specific route for a bus
@@ -1186,6 +1241,41 @@ export default function AdminDashboard() {
                         </div>
                       );
                     })}
+
+                    {/* Route Path Preview for Selected Routes */}
+                    {planResults.map((busResult, index) => {
+                      const busRoute = busRoutes[index];
+                      const selectedRoute = busResult.routes[busResult.selectedRouteIndex || 0];
+
+                      if (!selectedRoute || !selectedRoute.waypoints || selectedRoute.waypoints.length === 0) {
+                        return null;
+                      }
+
+                      return (
+                        <div key={`path-${index}`} className="border-t border-cool-slate/20 pt-m mt-m">
+                          <div className="flex items-center gap-s mb-s">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: busRoute.color }}
+                            />
+                            <h4 className="font-display font-medium text-graphite-gray">
+                              {busResult.bus_number} - Route {(busResult.selectedRouteIndex || 0) + 1}
+                            </h4>
+                          </div>
+                          <RoutePathPreview
+                            sourceName={busRoute.source}
+                            destName={busRoute.destination}
+                            sourceLat={busResult.source.lat}
+                            sourceLng={busResult.source.lng}
+                            destLat={busResult.destination.lat}
+                            destLng={busResult.destination.lng}
+                            waypoints={selectedRoute.waypoints}
+                            durationMin={selectedRoute.duration_min}
+                            distanceKm={selectedRoute.distance_km}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1256,9 +1346,33 @@ export default function AdminDashboard() {
         {/* Schedules Tab */}
         {activeTab === "schedules" && (
           <>
-            <h1 className="font-display text-h1 text-graphite-gray mb-l">
-              All Schedules
-            </h1>
+            <div className="flex justify-between items-center mb-l">
+              <h1 className="font-display text-h1 text-graphite-gray">
+                All Schedules
+              </h1>
+              <button
+                onClick={async () => {
+                  if (!confirm("Update all routes with proper place names? This will fetch location names from Google Maps.")) {
+                    return;
+                  }
+                  try {
+                    setLoading(true);
+                    const response = await adminAPI.updateAllRoutePlaceNames();
+                    alert(`✅ Success!\n\nRoutes updated: ${response.routes_updated}\nPlace names updated: ${response.total_place_names_updated}`);
+                    // Refresh schedules
+                    await fetchSchedules();
+                  } catch (error: any) {
+                    alert(`❌ Error: ${error.message}`);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="px-l py-m bg-primary-blue text-white rounded-lg hover:opacity-90 transition-opacity flex items-center gap-s"
+              >
+                <MapPin className="w-4 h-4" />
+                Update Place Names
+              </button>
+            </div>
             <div className="space-y-l">
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 {schedules.length === 0 ? (
@@ -1386,6 +1500,51 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                           )}
+
+                          {/* Action Buttons */}
+                          <div className="mt-l flex gap-m">
+                            <button
+                              onClick={() => {
+                                setSelectedRouteForDeploy({
+                                  id: schedule.route_id,
+                                  name: route?.name || schedule.route_id
+                                });
+                                setDeployModalOpen(true);
+                              }}
+                              className="px-m py-s bg-primary-blue text-white rounded-lg hover:bg-primary-blue/90 transition-colors text-body-sm font-medium"
+                            >
+                              🚌 Deploy Multiple Buses
+                            </button>
+                            <button
+                              onClick={() => setMatrixViewRouteId(schedule.route_id)}
+                              className="px-m py-s bg-warm-neutral-sand border border-cool-slate/20 text-graphite-gray rounded-lg hover:bg-warm-neutral-sand/80 transition-colors text-body-sm font-medium"
+                            >
+                              📊 View Schedule Matrix
+                            </button>
+                          </div>
+
+                          {/* Show intermediate stops if available */}
+                          {route?.intermediate_stops && route.intermediate_stops.length > 0 && (
+                            <div className="mt-l">
+                              <RouteStopsDisplay
+                                stops={route.intermediate_stops}
+                                routeName={route.name}
+                              />
+                            </div>
+                          )}
+
+                          {/* Show schedule matrix if selected */}
+                          {matrixViewRouteId === schedule.route_id && (
+                            <div className="mt-l">
+                              <ScheduleMatrix routeId={schedule.route_id} />
+                              <button
+                                onClick={() => setMatrixViewRouteId(null)}
+                                className="mt-m px-m py-s bg-cool-slate/10 text-cool-slate rounded-lg hover:bg-cool-slate/20 transition-colors text-body-sm"
+                              >
+                                Hide Matrix
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1396,6 +1555,22 @@ export default function AdminDashboard() {
           </>
         )}
       </main>
+
+      {/* Bus Deployment Modal */}
+      {selectedRouteForDeploy && (
+        <BusDeploymentModal
+          routeId={selectedRouteForDeploy.id}
+          routeName={selectedRouteForDeploy.name}
+          isOpen={deployModalOpen}
+          onClose={() => {
+            setDeployModalOpen(false);
+            setSelectedRouteForDeploy(null);
+          }}
+          onSuccess={() => {
+            fetchData(); // Refresh schedules
+          }}
+        />
+      )}
     </div>
   );
 }

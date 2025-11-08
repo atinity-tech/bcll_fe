@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
 import { passengerAPI, type BusSearchResult, type TravelHistory } from '@/lib/api';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import InterconnectedRoutes from '@/components/InterconnectedRoutes';
 import { Search, MapPin, Clock, DollarSign, History, Sparkles } from 'lucide-react';
 
 export default function PassengerDashboard() {
@@ -35,6 +36,10 @@ export default function PassengerDashboard() {
   // History
   const [history, setHistory] = useState<TravelHistory[]>([]);
   const [recommendations, setRecommendations] = useState<any>(null);
+
+  // Trip management
+  const [activeTrip, setActiveTrip] = useState<any>(null);
+  const [showInterconnectedRoutes, setShowInterconnectedRoutes] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || user?.role !== 'passenger') {
@@ -131,11 +136,69 @@ export default function PassengerDashboard() {
     setSearching(true);
     try {
       const response = await passengerAPI.searchBuses(searchForm);
-      setSearchResults(response.data);
+      console.log('Search response:', response.data);
+      // Backend returns { available_routes: [...], ... }
+      setSearchResults(response.data.available_routes || []);
     } catch (error: any) {
+      console.error('Search error:', error);
       alert(error.response?.data?.detail || 'Search failed');
+      setSearchResults([]);
     } finally {
       setSearching(false);
+    }
+  };
+
+  const handleStartTrip = async (routeId: string, busNumber: string) => {
+    try {
+      const response = await passengerAPI.startTrip({
+        source_name: sourceName,
+        source_lat: searchForm.source_lat,
+        source_lng: searchForm.source_lng,
+        dest_name: destName,
+        dest_lat: searchForm.dest_lat,
+        dest_lng: searchForm.dest_lng,
+        route_id: routeId,
+        bus_number: busNumber,
+      });
+      setActiveTrip(response.data.trip);
+      alert('Trip started! You can now switch routes if needed.');
+    } catch (error: any) {
+      alert(error.response?.data?.detail || 'Failed to start trip');
+    }
+  };
+
+  const handleSelectRoute = async (option: any, legIndex: number) => {
+    const leg = option.legs[legIndex];
+
+    if (!activeTrip) {
+      // Start new trip
+      await handleStartTrip(leg.route_id, leg.route_name);
+    } else {
+      // Switch route
+      try {
+        const response = await passengerAPI.switchRoute({
+          new_route_id: leg.route_id,
+          new_bus_number: leg.route_name,
+          boarding_location_name: leg.boarding_point.name,
+          boarding_lat: leg.boarding_point.lat,
+          boarding_lng: leg.boarding_point.lng,
+        });
+        setActiveTrip(response.data);
+        alert(`Switched to ${leg.route_name}. Fare so far: ₹${response.data.total_fare_so_far}`);
+      } catch (error: any) {
+        alert(error.response?.data?.detail || 'Failed to switch route');
+      }
+    }
+  };
+
+  const handleCompleteTrip = async () => {
+    try {
+      const response = await passengerAPI.completeTrip();
+      alert(`Trip completed! Total fare: ₹${response.data.total_fare}`);
+      setActiveTrip(null);
+      fetchHistory(); // Refresh history
+    } catch (error: any) {
+      alert(error.response?.data?.detail || 'Failed to complete trip');
     }
   };
 
@@ -293,8 +356,58 @@ export default function PassengerDashboard() {
                 <p className="text-sm text-gray-500 text-center">
                   💡 Start typing to see location suggestions from Google Maps
                 </p>
+
+                {/* Find Connections Button */}
+                {searchForm.source_lat !== 0 && searchForm.dest_lat !== 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowInterconnectedRoutes(!showInterconnectedRoutes)}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition"
+                  >
+                    🔄 {showInterconnectedRoutes ? 'Hide' : 'Find'} Multi-Route Connections
+                  </button>
+                )}
               </form>
+
+              {/* Active Trip Banner */}
+              {activeTrip && (
+                <div className="mt-4 bg-green-50 border-2 border-green-300 rounded-lg p-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-green-800 mb-2">🚌 Active Trip</h3>
+                      <p className="text-sm text-green-700">
+                        Currently on: <strong>{activeTrip.current_bus_number}</strong>
+                      </p>
+                      <p className="text-sm text-green-700">
+                        Route: {activeTrip.current_route_id}
+                      </p>
+                      <p className="text-sm text-green-700">
+                        Fare so far: ₹{activeTrip.total_fare_so_far?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleCompleteTrip}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+                    >
+                      Complete Trip
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Interconnected Routes */}
+            {showInterconnectedRoutes && searchForm.source_lat !== 0 && searchForm.dest_lat !== 0 && (
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <InterconnectedRoutes
+                  currentLat={searchForm.source_lat}
+                  currentLng={searchForm.source_lng}
+                  destLat={searchForm.dest_lat}
+                  destLng={searchForm.dest_lng}
+                  onSelectRoute={handleSelectRoute}
+                />
+              </div>
+            )}
 
             {/* Search Results */}
             {searchResults.length > 0 && (
@@ -376,7 +489,7 @@ export default function PassengerDashboard() {
 
                       {/* Next Departures */}
                       {result.departure_times && result.departure_times.length > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                        <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3">
                           <div className="text-xs font-medium text-blue-900 mb-2">⏰ Next Departures:</div>
                           <div className="flex gap-2 flex-wrap">
                             {result.departure_times.map((time, idx) => (
@@ -390,6 +503,14 @@ export default function PassengerDashboard() {
                           </div>
                         </div>
                       )}
+
+                      {/* Start Trip Button */}
+                      <button
+                        onClick={() => handleStartTrip(result.route_id, result.bus_numbers?.[0] || result.route_id)}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-semibold transition"
+                      >
+                        🚌 Start Trip on This Route
+                      </button>
                     </div>
                   ))}
                 </div>

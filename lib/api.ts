@@ -65,6 +65,23 @@ export interface BusSearchRequest {
   dest_lng: number;
 }
 
+export interface IntermediateStop {
+  name: string;
+  lat: number;
+  lng: number;
+  sequence: number;
+  distance_from_start_km: number;
+  estimated_time_from_start_min: number;
+}
+
+export interface StopTiming {
+  stop_name: string;
+  stop_lat: number;
+  stop_lng: number;
+  arrival_time: string;
+  departure_time: string;
+}
+
 export interface Route {
   _id: string;
   route_id: string;
@@ -72,6 +89,7 @@ export interface Route {
   source_stop_id: string;
   dest_stop_id: string;
   path: any[];
+  intermediate_stops?: IntermediateStop[];
   total_distance_km: number;
   estimated_duration_min: number;
   gemini_score: number;
@@ -83,10 +101,16 @@ export interface Schedule {
   _id: string;
   route_id: string;
   bus_id: string;
+  bus_instance_id?: string;
+  bus_number?: string;
   peak_hour: string;
   start_time: string;
+  end_time?: string;
   frequency_min: number;
   suggested_buses_count: number;
+  departure_times?: string[];
+  stop_timings?: StopTiming[];
+  deployment_sequence?: number;
   active: boolean;
   created_at: string;
 }
@@ -154,21 +178,45 @@ export const adminAPI = {
 
   getSchedules: () =>
     api.get<{ total: number; schedules: Schedule[] }>('/admin/schedules'),
+
+  deployMultipleBuses: (route_id: string, data: { num_buses: number; frequency_min: number; peak_hour: string }) =>
+    api.post(`/admin/route/${route_id}/deploy-buses`, data),
+
+  getScheduleMatrix: (route_id: string) =>
+    api.get(`/admin/route/${route_id}/schedule-matrix`),
+
+  updateRoutePlaceNames: (route_id: string) =>
+    api.post(`/admin/routes/${route_id}/update-place-names`),
+
+  updateAllRoutePlaceNames: () =>
+    api.post('/admin/routes/update-all-place-names'),
 };
 
 // Passenger API
 export const passengerAPI = {
   searchBuses: (data: BusSearchRequest) =>
     api.post<BusSearchResult[]>('/passenger/search', data),
-  
+
   getRecommendations: () =>
     api.get('/passenger/recommendations'),
-  
+
   getHistory: () =>
     api.get<{ total: number; history: TravelHistory[] }>('/passenger/history'),
-  
+
   calculateFare: (data: { distance_km: number; is_peak_hour: boolean }) =>
     api.post('/passenger/fare', data),
+
+  findConnections: (data: { current_lat: number; current_lng: number; final_dest_lat: number; final_dest_lng: number }) =>
+    api.post('/passenger/find-connections', data),
+
+  startTrip: (data: { source_name: string; source_lat: number; source_lng: number; dest_name: string; dest_lat: number; dest_lng: number; route_id: string; bus_number: string }) =>
+    api.post('/passenger/trip/start', null, { params: data }),
+
+  switchRoute: (data: { new_route_id: string; new_bus_number: string; boarding_location_name: string; boarding_lat: number; boarding_lng: number }) =>
+    api.post('/passenger/trip/switch-route', null, { params: data }),
+
+  completeTrip: () =>
+    api.post('/passenger/trip/complete'),
 };
 
 export default api;
